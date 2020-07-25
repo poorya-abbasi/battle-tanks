@@ -1,6 +1,7 @@
 import java.awt.*;
 import java.awt.event.*;
 import java.util.Random;
+import java.util.TimerTask;
 
 import javax.swing.*;
 import javax.swing.border.LineBorder;
@@ -17,42 +18,149 @@ class Main {
     static Player[] players = new Player[playerCount];
     public static Icon[] playerIcon={new ImageIcon("player-w.png"),new ImageIcon("player-a.png"),new ImageIcon("player-s.png"),new ImageIcon("player-d.png")};
     public static Icon[] enemyIcon={new ImageIcon("enemy-w.png"),new ImageIcon("enemy-a.png"),new ImageIcon("enemy-s.png"),new ImageIcon("enemy-d.png")};
+    public static Icon healthIcon = new ImageIcon("health.png");
+    public static JFrame gameFrame;
+    static long start;
+    static java.util.Timer timer;
 
-    public static void main(final String[] args){
-        //Setting Up
+    public static void main(final String[] args) {
+        // Setting Up
         playground = new JButton[rows][coloumns];
         spaceColor = Color.decode("#e85d04");
         borderColor = Color.decode("#370617");
         obstacleColor = Color.decode("#6a040f");
         obstacleChance = (0.4 * coloumns * rows);
-        for(int i=0; i<playerCount; i++){
+        // Launching
+        drawStartMenu();
+        // startGame();
+    }
+
+    private static void startGame() {
+        timer = new java.util.Timer();
+        for (int i = 0; i < playerCount; i++) {
             players[i] = new Player();
-            if(i==0){
+            if (i == 0) {
                 players[i].icon = playerIcon[3];
-            }else{
+            } else {
                 players[i].icon = enemyIcon[3];
             }
         }
-        //Launching
-        // drawStartMenu();
-        startGame();
-    }
-
-    private static void startGame(){
+        start = System.currentTimeMillis();
+        //Drawing Playground
         drawPlayground();
+        //Spawning Enemies
         for(int i=0; i<playerCount-1; i++){
             spawnPlayer(players[i+1]);
             players[i+1].tag="BOT";
         }
+        //Spawning Player
         spawnPlayer(players[0]);
         players[0].tag="Player";
-    
+        //Activating AI
+        activateAI();
+        //Scheduling Health Packs
+        timer.schedule(new TimerTask(){
+            @Override
+            public void run() {
+                spawnHealth();
+            }
+        }, 20000,20000);
+    }
+
+    private static void activateAI(){
+        for(int i = 1; i<playerCount; i++){
+            final int index = i;
+            timer.schedule(new TimerTask(){
+                @Override
+                public void run() {
+                    if(players[index].lives>0){
+                        decideForAI(players[index]);
+                    }
+                }   
+            },0,1000);
+        }
+    }
+
+    private static void decideForAI(Player player){
+
+        char direction = player.direction;
+        int x = player.x; int y = player.y;
+        switch(direction){
+            case 'w':
+                for(int i = x-1;i>0;i--){
+                    if(playground[i][y].getBackground()==obstacleColor || playground[i][y].getBackground()==borderColor){
+                        break;
+                    }
+                    if(isPlayerInCell(i, y)){
+                        fire(player);
+                        return;
+                    }
+                }
+                break;
+            case 'a':
+                for(int i = y-1;i>0;i--){
+                    if(playground[x][i].getBackground()==obstacleColor || playground[x][i].getBackground()==borderColor){
+                        break;
+                    }
+                    if(isPlayerInCell(x, i)){
+                        fire(player);
+                        return;
+                    }
+                }
+                break;
+            case 's':
+                for(int i = x+1;i<rows;i++){
+                    if(playground[i][y].getBackground()==obstacleColor || playground[i][y].getBackground()==borderColor){
+                        break;
+                    }
+                    if(isPlayerInCell(i, y)){
+                        fire(player);
+                        return;
+                    }
+                }
+                break;
+            case 'd':
+                for(int i = y+1;y<coloumns;i++){
+                    if(playground[x][i].getBackground()==obstacleColor || playground[x][i].getBackground()==borderColor){
+                        break;
+                    }
+                    if(isPlayerInCell(x, i)){
+                        fire(player);
+                        return;
+                    }
+                }
+                break;
+        }
+
+        AIRandomMove(player);
+    }
+
+    private static void AIRandomMove(Player player){
+        int random = new Random().nextInt(4);
+        switch(random){
+            case 0:
+                changeAIDirectons(player, 'w');
+                movePlayer(player, 'w');
+                break;
+            case 1:
+                changeAIDirectons(player, 'a');
+                movePlayer(player, 'a');
+                break;
+            case 2:
+                changeAIDirectons(player, 's');
+                movePlayer(player, 's');
+                break;
+            case 3:
+                changeAIDirectons(player, 'd');
+                movePlayer(player, 'd');
+                break;
+        }
     }
 
     private static void spawnPlayer(Player player){
             int iRand = new Random().nextInt(rows-2)+1;
             int jRand = new Random().nextInt(coloumns-2)+1;
-            if(playground[iRand][jRand].getBackground()==obstacleColor || playground[iRand][jRand].getText()==player.tag){
+            if(playground[iRand][jRand].getBackground()==obstacleColor || playground[iRand][jRand].getText()==player.tag || isPlayerInCell(iRand, jRand)){
                 spawnPlayer(player);
                 return;
             }
@@ -60,6 +168,16 @@ class Main {
             playground[iRand][jRand].setIcon(player.icon);
             player.x=iRand;
             player.y=jRand;
+    }
+
+    private static void spawnHealth(){
+        int iRand = new Random().nextInt(rows-2)+1;
+        int jRand = new Random().nextInt(coloumns-2)+1;
+        if(playground[iRand][jRand].getBackground()==obstacleColor || isPlayerInCell(iRand, jRand)){
+            spawnHealth();
+            return;
+        }
+        playground[iRand][jRand].setIcon(healthIcon);
     }
 
     private static void drawPlayground(){
@@ -97,6 +215,7 @@ class Main {
             }
         }
         processFrame(frame);
+        gameFrame = frame;
         frame.setVisible(true);
     }
 
@@ -112,23 +231,24 @@ class Main {
         //Setting Up Button Box
         final Box box=Box.createVerticalBox();    
         //Setting Up playground
-        final JButton playButton=new JButton("Play!");
+        final JButton playButton=new JButton("Play Offline!");
         playButton.addActionListener(new ActionListener()
         {
           public void actionPerformed(final ActionEvent e)
           {
+            frame.dispose();
             startGame();
           }
         });
-        final JButton recordsButton=new JButton("Leaderboard");
+        final JButton recordsButton=new JButton("Play Online!");
         recordsButton.addActionListener(new ActionListener()
         {
           public void actionPerformed(final ActionEvent e)
           {
-              frame.dispose();
+              exit();
           }
         });
-        final JButton exitButton=new JButton("Exit");
+        final JButton exitButton=new JButton("Online Server");
         exitButton.setPreferredSize(new Dimension(40,40));
         exitButton.addActionListener(new ActionListener()
         {
@@ -177,7 +297,7 @@ class Main {
     private static boolean isPlayerInCell(int i, int j){
         JButton temp = playground[i][j];
         for(int m=0;m<4;m++){
-            if(temp.getIcon()==enemyIcon[m]){
+            if(temp.getIcon()==enemyIcon[m] || temp.getIcon()==playerIcon[m]){
                 return true;
             }
         }
@@ -216,10 +336,15 @@ class Main {
         
         player.x=newI;
         player.y=newJ;
-        playground[newI][newJ].setIcon(playground[i][j].getIcon());
-        playground[newI][newJ].setText(player.lives+"");
-        playground[i][j].setText("");
-        playground[i][j].setIcon(null);
+        if(playground[newI][newJ].getIcon()==healthIcon && player.lives<4){
+            player.lives++;
+        }
+        if(player.lives>0){
+            playground[newI][newJ].setIcon(playground[i][j].getIcon());
+            playground[newI][newJ].setText(player.lives+"");
+            playground[i][j].setText("");
+            playground[i][j].setIcon(null);
+        }    
     }
 
     private static void changePlayerDirection(Player player, char direction){
@@ -246,11 +371,133 @@ class Main {
         }
     }
 
+    private static void changeAIDirectons(Player player, char direction){
+        if(player.lives<1){
+            return;
+        }
+        player.direction = direction;
+        int i = player.x,j =player.y;
+        switch(direction){
+            case 'w':
+                playground[i][j].setIcon(enemyIcon[0]);
+                player.icon=enemyIcon[0];
+                break;
+            case 'a':
+                playground[i][j].setIcon(enemyIcon[1]);
+                player.icon=enemyIcon[1];
+                break;
+            case 's':
+                playground[i][j].setIcon(enemyIcon[2]);
+                player.icon=enemyIcon[2];
+                break;
+            case 'd':
+                playground[i][j].setIcon(enemyIcon[3]);
+                player.icon=enemyIcon[3];
+                break;
+        }
+    }
+
+    private static void reducePlayerLivesAtPosition(int x , int y){
+        for(int i =0; i< playerCount;i++){
+            if(players[i].x==x && players[i].y==y){
+                players[i].lives--;
+                if(players[i].lives<1){
+                    players[i].icon=null;
+                    playground[x][y].setIcon(null);
+                    playground[x][y].setText("");
+                    long end = System.currentTimeMillis();
+                    if(i==0){
+                        gameFrame.dispose();
+                        int passed = (int)((end - start)/1000);
+                        timer.cancel();
+                        new java.util.Timer().schedule(new TimerTask(){
+                            @Override
+                            public void run() {
+                                JOptionPane.getRootFrame().dispose();   
+                                drawStartMenu();
+                            }
+                        }, 5000);
+                        JOptionPane.showMessageDialog(null,"You Lost In \n "+passed+" Seconds");
+                    }else{
+                        for(int m =1;m<playerCount; m++){
+                            if(players[m].lives>0){
+                                return;
+                            }
+                        }
+                        int passed = (int)((end - start)/1000);
+                        gameFrame.dispose();
+                        timer.cancel();
+                        new java.util.Timer().schedule(new TimerTask(){
+                            @Override
+                            public void run() {
+                                JOptionPane.getRootFrame().dispose();   
+                                drawStartMenu();
+                            }
+                        }, 5000);
+                        JOptionPane.showMessageDialog(null, "You Won In \n "+passed+" Seconds");         
+                    }
+                }else{
+                    playground[x][y].setText(players[i].lives+"");
+                }
+                break;
+            }
+        }
+    }
+
+    private static void fire(Player player){
+        char direction = player.direction;
+        int x = player.x;int y = player.y;
+        switch(direction){
+            case 'w':
+                for(int i = x-1;i>0;i--){
+                    if(playground[i][y].getBackground()==obstacleColor || playground[i][y].getBackground()==borderColor){
+                        return;
+                    }
+                    if(isPlayerInCell(i, y)){
+                        reducePlayerLivesAtPosition(i,y);
+                    }
+                }
+                break;
+            case 'a':
+                for(int i = y-1;i>0;i--){
+                    if(playground[x][i].getBackground()==obstacleColor || playground[x][i].getBackground()==borderColor){
+                        return;
+                    }
+                    if(isPlayerInCell(x, i)){
+                        reducePlayerLivesAtPosition(x,i);
+                    }
+                }
+                break;
+            case 's':
+                for(int i = x+1;i<rows;i++){
+                    if(playground[i][y].getBackground()==obstacleColor || playground[i][y].getBackground()==borderColor){
+                        return;
+                    }
+                    if(isPlayerInCell(i, y)){
+                        reducePlayerLivesAtPosition(i,y);
+                    }
+                }
+                break;
+            case 'd':
+                for(int i = y+1;y<coloumns;i++){
+                    if(playground[x][i].getBackground()==obstacleColor || playground[x][i].getBackground()==borderColor){
+                        return;
+                    }
+                    if(isPlayerInCell(x, i)){
+                        reducePlayerLivesAtPosition(x,i);
+                    }
+                }
+                break;
+        }
+    }
+
     public static class GameKeyListener extends KeyAdapter{
+
+        boolean cooldown = false;
+
         @Override
         public void keyPressed(KeyEvent ke){
             int code = ke.getKeyCode();
-            System.out.println(code+"");
             switch(code){
                 case KeyEvent.VK_RIGHT:
                     moveCharacter('d');
@@ -263,6 +510,18 @@ class Main {
                     break;
                 case KeyEvent.VK_DOWN:
                     moveCharacter('s');
+                    break;
+                case KeyEvent.VK_SPACE:
+                    if(!cooldown){
+                        fire(players[0]);
+                        cooldown=true;
+                        timer.schedule(new TimerTask(){
+                            @Override
+                            public void run() {
+                                cooldown = false;
+                            }
+                        }, 1000);
+                    }
                     break;
             }
         }
